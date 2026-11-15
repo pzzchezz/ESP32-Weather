@@ -59,6 +59,22 @@ jobs:
             --warnings default \
             "${SKETCH_DIR}"
 
+      # core 2.0.17 ไม่สร้าง merged.bin ให้ จึงรวมเองด้วย esptool
+      - name: Create merged.bin
+        run: |
+          pip install "esptool==4.8.1"
+          NAME=$(basename "${SKETCH_DIR}")
+          B=$(dirname "$(find "${SKETCH_DIR}/build" -name '*.ino.bin' | head -n 1)")
+          BOOT="$HOME/.arduino15/packages/esp32/hardware/esp32/${ESP32_CORE_VERSION}/tools/partitions/boot_app0.bin"
+          ls -l "$B" "$BOOT"
+          esptool.py --chip esp32 merge_bin \
+            -o "$B/${NAME}.ino.merged.bin" \
+            --flash_mode dio --flash_freq 80m --flash_size 4MB \
+            0x1000 "$B/${NAME}.ino.bootloader.bin" \
+            0x8000 "$B/${NAME}.ino.partitions.bin" \
+            0xe000 "$BOOT" \
+            0x10000 "$B/${NAME}.ino.bin"
+
       - name: List output
         run: find "${SKETCH_DIR}/build" -type f -name "*.bin" -exec ls -lh {} \;
 
