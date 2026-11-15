@@ -1,0 +1,59 @@
+name: Build ESP32 Firmware
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  SKETCH_DIR: ESP32Weather
+  FQBN: esp32:esp32:esp32
+  ESP32_CORE_VERSION: 2.0.17
+  ARDUINO_BOARD_MANAGER_ADDITIONAL_URLS: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # จำเป็นสำหรับแนบไฟล์ใน Release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32 core
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@${ESP32_CORE_VERSION}
+
+      # ใช้เมื่อเปิด #define USE_OLED 1 (ถ้าไม่ใช้ก็ติดตั้งไว้ได้ ไม่มีผลเสีย)
+      - name: Install libraries
+        run: arduino-cli lib install "Adafruit SSD1306" "Adafruit GFX Library"
+
+      - name: Compile
+        run: |
+          arduino-cli compile \
+            --fqbn ${FQBN} \
+            --export-binaries \
+            --warnings default \
+            ${SKETCH_DIR}
+
+      - name: List output
+        run: find ${SKETCH_DIR}/build -type f -name "*.bin" -exec ls -lh {} \;
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ESP32Weather-firmware
+          path: ${{ env.SKETCH_DIR }}/build/**/*.bin
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release (เมื่อ push tag เช่น v1.0)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.SKETCH_DIR }}/build/**/*.bin
