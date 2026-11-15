@@ -8,7 +8,6 @@ on:
   workflow_dispatch:
 
 env:
-  SKETCH_DIR: ESP32Weather
   FQBN: esp32:esp32:esp32
   ESP32_CORE_VERSION: 2.0.17
   ARDUINO_BOARD_MANAGER_ADDITIONAL_URLS: https://espressif.github.io/arduino-esp32/package_esp32_index.json
@@ -21,6 +20,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # หาไฟล์ .ino ในรีโปให้เอง แล้วคัดลอกไปไว้ในโฟลเดอร์ที่ชื่อตรงกับไฟล์
+      # (Arduino บังคับให้ชื่อโฟลเดอร์ = ชื่อ .ino) ไม่ว่าจะวางไว้ตรงไหนก็ใช้ได้
+      - name: Prepare sketch
+        run: |
+          INO=$(find . -name "*.ino" -not -path "./.git/*" -not -path "./_sketch/*" | head -n 1)
+          if [ -z "$INO" ]; then
+            echo "::error::ไม่พบไฟล์ .ino ในรีโป"
+            find . -not -path "./.git/*" -type f
+            exit 1
+          fi
+          echo "พบ sketch: $INO"
+          NAME=$(basename "$INO" .ino)
+          mkdir -p "_sketch/$NAME"
+          cp "$INO" "_sketch/$NAME/$NAME.ino"
+          echo "SKETCH_DIR=_sketch/$NAME" >> "$GITHUB_ENV"
 
       - name: Setup Arduino CLI
         uses: arduino/setup-arduino-cli@v2
@@ -40,10 +55,10 @@ jobs:
             --fqbn ${FQBN} \
             --export-binaries \
             --warnings default \
-            ${SKETCH_DIR}
+            "${SKETCH_DIR}"
 
       - name: List output
-        run: find ${SKETCH_DIR}/build -type f -name "*.bin" -exec ls -lh {} \;
+        run: find "${SKETCH_DIR}/build" -type f -name "*.bin" -exec ls -lh {} \;
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
