@@ -16,26 +16,29 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write   # จำเป็นสำหรับแนบไฟล์ใน Release
+      contents: write   # จำเป็นสำหรับสร้าง Release และแนบไฟล์
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       # หาไฟล์ .ino ในรีโปให้เอง แล้วคัดลอกไปไว้ในโฟลเดอร์ที่ชื่อตรงกับไฟล์
-      # (Arduino บังคับให้ชื่อโฟลเดอร์ = ชื่อ .ino) ไม่ว่าจะวางไว้ตรงไหนก็ใช้ได้
       - name: Prepare sketch
         run: |
+          echo "ไฟล์ .ino ทั้งหมดในรีโป:"
+          find . -name "*.ino" -not -path "./.git/*" -not -path "./_sketch/*"
           INO=$(find . -name "*.ino" -not -path "./.git/*" -not -path "./_sketch/*" | head -n 1)
           if [ -z "$INO" ]; then
             echo "::error::ไม่พบไฟล์ .ino ในรีโป"
-            find . -not -path "./.git/*" -type f
             exit 1
           fi
-          echo "พบ sketch: $INO"
+          echo "ใช้ sketch: $INO"
           NAME=$(basename "$INO" .ino)
           mkdir -p "_sketch/$NAME"
           cp "$INO" "_sketch/$NAME/$NAME.ino"
           echo "SKETCH_DIR=_sketch/$NAME" >> "$GITHUB_ENV"
+          echo "--- ตรวจเนื้อหา sketch ---"
+          grep -n "define USE_OLED" "$INO" || echo "ไม่มี USE_OLED (ไฟล์เก่า?)"
+          grep -n "U8g2lib\|Adafruit_SSD1306" "$INO" || true
 
       - name: Setup Arduino CLI
         uses: arduino/setup-arduino-cli@v2
@@ -66,8 +69,16 @@ jobs:
           path: ${{ env.SKETCH_DIR }}/build/**/*.bin
           if-no-files-found: error
 
-      - name: Attach to GitHub Release (เมื่อ push tag เช่น v1.0)
-        if: startsWith(github.ref, 'refs/tags/v')
+      # สร้าง Release อัตโนมัติทุกครั้งที่ push (ไม่รวม pull request)
+      # push tag v* จะใช้ชื่อ tag นั้น ส่วน push ปกติจะได้ tag เป็น build-<เลขรอบ>
+      - name: Publish to GitHub Releases
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('build-{0}', github.run_number) }}
+          target_commitish: ${{ github.sha }}
+          name: Firmware ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('build #{0}', github.run_number) }}
+          body: |
+            ไฟล์เฟิร์มแวร์ ESP32 (commit ${{ github.sha }})
+            เบิร์นไฟล์ `*.merged.bin` ที่ address 0x0
           files: ${{ env.SKETCH_DIR }}/build/**/*.bin
