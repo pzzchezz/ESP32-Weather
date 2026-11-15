@@ -45,9 +45,8 @@ jobs:
           arduino-cli core update-index
           arduino-cli core install esp32:esp32@${ESP32_CORE_VERSION}
 
-      # ใช้เมื่อเปิด #define USE_OLED 1 (ถ้าไม่ใช้ก็ติดตั้งไว้ได้ ไม่มีผลเสีย)
       - name: Install libraries
-        run: arduino-cli lib install "Adafruit SSD1306" "Adafruit GFX Library"
+        run: arduino-cli lib install "U8g2"
 
       - name: Compile
         run: |
